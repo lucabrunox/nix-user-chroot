@@ -114,6 +114,8 @@ path_buf, path_buf2, strerror(errno));
     chdir(cwd);
 
     // execute the command
+   
+    setenv("NIX_CONF_DIR", "/nix/etc/nix", 1);
     execvp(argv[2], argv+2);
     err_exit("execvp");
 }

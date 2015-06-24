@@ -10,3 +10,7 @@ $ nix-*-linux/install
 ```
 
 You are in a user chroot where `/` is owned by your user, hence also `/nix` is owned by your user. Everything else is bind mounted from the real root.
+
+Notes:
+
+- The nix config is not in `/etc/nix` but in `/nix/etc/nix`, so that you can modify it. This is done with the `NIX_CONF_DIR`, which you can override at any time.

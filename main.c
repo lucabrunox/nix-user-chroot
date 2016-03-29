@@ -96,6 +96,13 @@ path_buf, path_buf2, strerror(errno));
         }
     }
 
+    // fixes issue #1 where writing to /proc/self/gid_map fails
+    // see user_namespaces(7) for more documentation
+    int fd_setgroups = open("/proc/self/setgroups", O_WRONLY);
+    if (fd_setgroups > 0) {
+        write(fd_setgroups, "deny", 4);
+    }
+
     // map the original uid/gid in the new ns
     snprintf(map_buf, sizeof(map_buf), "%d %d 1", uid, uid);
     update_map(map_buf, "/proc/self/uid_map");

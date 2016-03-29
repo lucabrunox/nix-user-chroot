@@ -18,13 +18,13 @@
 
 static void usage(char *pname) {
     fprintf(stderr, "Usage: %s <rootdir> <command>\n", pname);
-   
+
     exit(EXIT_FAILURE);
 }
 
 static void update_map(char *mapping, char *map_file) {
     int fd;
-       
+
     fd = open(map_file, O_WRONLY);
     if (fd < 0) {
         err_exit("map open");
@@ -34,7 +34,7 @@ static void update_map(char *mapping, char *map_file) {
     if (write(fd, mapping, map_len) != map_len) {
         err_exit("map write");
     }
-   
+
     close(fd);
 }
 
@@ -47,16 +47,16 @@ int main(int argc, char *argv[]) {
     if (argc < 3) {
         usage(argv[0]);
     }
-   
+
     char *rootdir = realpath(argv[1], NULL);
     if (!rootdir) {
         err_exit("realpath");
     }
-   
+
     uid_t uid = getuid();
     gid_t gid = getgid();
 
-    if (unshare (CLONE_NEWNS | CLONE_NEWUSER) < 0) {
+    if (unshare(CLONE_NEWNS | CLONE_NEWUSER) < 0) {
         err_exit("unshare");
     }
 
@@ -69,29 +69,24 @@ int main(int argc, char *argv[]) {
     struct dirent *ent;
     while ((ent = readdir(d))) {
         // do not bind mount an existing nix installation
-        if (!strcmp (ent->d_name, ".") || !strcmp (ent->d_name, "..") ||
-!strcmp (ent->d_name, "nix")) {
+        if (!strcmp(ent->d_name, ".") || !strcmp(ent->d_name, "..") || !strcmp(ent->d_name, "nix")) {
             continue;
         }
 
         snprintf(path_buf, sizeof(path_buf), "/%s", ent->d_name);
-       
+
         struct stat statbuf;
         if (lstat(path_buf, &statbuf) < 0) {
-            fprintf(stderr, "Cannot stat %s: %s\n", path_buf,
-strerror(errno));
+            fprintf(stderr, "Cannot stat %s: %s\n", path_buf, strerror(errno));
             continue;
         }
 
-        snprintf(path_buf2, sizeof(path_buf2), "%s/%s", rootdir,
-ent->d_name);
-       
+        snprintf(path_buf2, sizeof(path_buf2), "%s/%s", rootdir, ent->d_name);
+
         if (S_ISDIR(statbuf.st_mode)) {
             mkdir(path_buf2, statbuf.st_mode & ~S_IFMT);
-            if (mount(path_buf, path_buf2, "none", MS_BIND | MS_REC,
-NULL) < 0) {
-                fprintf(stderr, "Cannot bind mount %s to %s: %s\n",
-path_buf, path_buf2, strerror(errno));
+            if (mount(path_buf, path_buf2, "none", MS_BIND | MS_REC, NULL) < 0) {
+                fprintf(stderr, "Cannot bind mount %s to %s: %s\n", path_buf, path_buf2, strerror(errno));
             }
         }
     }
@@ -106,7 +101,7 @@ path_buf, path_buf2, strerror(errno));
     // map the original uid/gid in the new ns
     snprintf(map_buf, sizeof(map_buf), "%d %d 1", uid, uid);
     update_map(map_buf, "/proc/self/uid_map");
-   
+
     snprintf(map_buf, sizeof(map_buf), "%d %d 1", gid, gid);
     update_map(map_buf, "/proc/self/gid_map");
 
@@ -115,13 +110,13 @@ path_buf, path_buf2, strerror(errno));
     }
 
     chdir("/");
-    if (chroot (rootdir) < 0) {
+    if (chroot(rootdir) < 0) {
         err_exit("chroot");
     }
     chdir(cwd);
 
     // execute the command
-   
+
     setenv("NIX_CONF_DIR", "/nix/etc/nix", 1);
     execvp(argv[2], argv+2);
     err_exit("execvp");

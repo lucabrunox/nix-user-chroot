@@ -76,7 +76,7 @@ int main(int argc, char *argv[]) {
         snprintf(path_buf, sizeof(path_buf), "/%s", ent->d_name);
 
         struct stat statbuf;
-        if (lstat(path_buf, &statbuf) < 0) {
+        if (stat(path_buf, &statbuf) < 0) {
             fprintf(stderr, "Cannot stat %s: %s\n", path_buf, strerror(errno));
             continue;
         }

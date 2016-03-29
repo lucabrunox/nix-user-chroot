@@ -17,7 +17,7 @@
 #define err_exit(msg) { perror(msg); exit(EXIT_FAILURE); }
 
 static void usage(char *pname) {
-    fprintf(stderr, "Usage: %s <rootdir> <command>\n", pname);
+    fprintf(stderr, "Usage: %s <command>\n", pname);
 
     exit(EXIT_FAILURE);
 }
@@ -44,11 +44,12 @@ int main(int argc, char *argv[]) {
     char path_buf2[PATH_MAX];
     char cwd[PATH_MAX];
 
-    if (argc < 3) {
+    if (argc < 2) {
         usage(argv[0]);
     }
 
-    char *rootdir = realpath(argv[1], NULL);
+    char template[] = "/tmp/nixXXXXXX";
+    char *rootdir = mkdtemp(template);
     if (!rootdir) {
         err_exit("realpath");
     }
@@ -118,6 +119,6 @@ int main(int argc, char *argv[]) {
     // execute the command
 
     setenv("NIX_CONF_DIR", "/nix/etc/nix", 1);
-    execvp(argv[2], argv+2);
+    execvp(argv[1], argv+1);
     err_exit("execvp");
 }

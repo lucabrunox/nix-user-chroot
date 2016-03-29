@@ -17,7 +17,7 @@
 #define err_exit(msg) { perror(msg); exit(EXIT_FAILURE); }
 
 static void usage(char *pname) {
-    fprintf(stderr, "Usage: %s <command>\n", pname);
+    fprintf(stderr, "Usage: %s <nixpath> <command>\n", pname);
 
     exit(EXIT_FAILURE);
 }
@@ -44,13 +44,18 @@ int main(int argc, char *argv[]) {
     char path_buf2[PATH_MAX];
     char cwd[PATH_MAX];
 
-    if (argc < 2) {
+    if (argc < 3) {
         usage(argv[0]);
     }
 
     char template[] = "/tmp/nixXXXXXX";
     char *rootdir = mkdtemp(template);
     if (!rootdir) {
+        err_exit("realpath");
+    }
+
+    char *nixdir = realpath(argv[1], NULL);
+    if (!nixdir) {
         err_exit("realpath");
     }
 
@@ -92,6 +97,17 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    struct stat statbuf2;
+    if (stat(nixdir, &statbuf2) < 0) {
+        err_exit("stat");
+    }
+
+    snprintf(path_buf, sizeof(path_buf), "%s/nix", rootdir);
+    mkdir(path_buf, statbuf2.st_mode & ~S_IFMT);
+    if (mount(nixdir, path_buf, "none", MS_BIND | MS_REC, NULL) < 0) {
+        err_exit("mount");
+    }
+
     // fixes issue #1 where writing to /proc/self/gid_map fails
     // see user_namespaces(7) for more documentation
     int fd_setgroups = open("/proc/self/setgroups", O_WRONLY);
@@ -119,6 +135,6 @@ int main(int argc, char *argv[]) {
     // execute the command
 
     setenv("NIX_CONF_DIR", "/nix/etc/nix", 1);
-    execvp(argv[1], argv+1);
+    execvp(argv[2], argv+2);
     err_exit("execvp");
 }

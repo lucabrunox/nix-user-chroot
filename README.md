@@ -1,11 +1,9 @@
 Run nix as user in a lightweight chrooted container.
 
 ```
-$ mkdir $ROOT
-$ nix-user-chroot $ROOT bash
+$ mkdir -m 0755 ~/nix && chown $(whoami) ~/nix
+$ nix-user-chroot ~/.nix sh
 $ download and extract latest nix binary tarball
-$ mkdir -m 0755 /nix && chown $(whoami) /nix
-$ mkdir -p /nix/var/nix/profiles/per-user/luca
 $ nix-*-linux/install
 ```
 

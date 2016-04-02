@@ -14,7 +14,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 
-#define err_exit(msg) { perror(msg); exit(EXIT_FAILURE); }
+#define err_exit(format, ...) { fprintf(stderr, format ": %s\n", ##__VA_ARGS__, strerror(errno)); exit(EXIT_FAILURE); }
 
 static void usage(char *pname) {
     fprintf(stderr, "Usage: %s <nixpath> <command>\n", pname);
@@ -51,19 +51,19 @@ int main(int argc, char *argv[]) {
     char template[] = "/tmp/nixXXXXXX";
     char *rootdir = mkdtemp(template);
     if (!rootdir) {
-        err_exit("realpath");
+        err_exit("mkdtemp(%s)", template);
     }
 
     char *nixdir = realpath(argv[1], NULL);
     if (!nixdir) {
-        err_exit("realpath");
+        err_exit("realpath(%s)", argv[1]);
     }
 
     uid_t uid = getuid();
     gid_t gid = getgid();
 
     if (unshare(CLONE_NEWNS | CLONE_NEWUSER) < 0) {
-        err_exit("unshare");
+        err_exit("unshare()");
     }
 
     // bind mount all / stuff into rootdir
@@ -99,13 +99,13 @@ int main(int argc, char *argv[]) {
 
     struct stat statbuf2;
     if (stat(nixdir, &statbuf2) < 0) {
-        err_exit("stat");
+        err_exit("stat(%s)", nixdir);
     }
 
     snprintf(path_buf, sizeof(path_buf), "%s/nix", rootdir);
     mkdir(path_buf, statbuf2.st_mode & ~S_IFMT);
     if (mount(nixdir, path_buf, "none", MS_BIND | MS_REC, NULL) < 0) {
-        err_exit("mount");
+        err_exit("mount(%s, %s)", nixdir, path_buf);
     }
 
     // fixes issue #1 where writing to /proc/self/gid_map fails
@@ -123,12 +123,12 @@ int main(int argc, char *argv[]) {
     update_map(map_buf, "/proc/self/gid_map");
 
     if (!getcwd(cwd, PATH_MAX)) {
-        err_exit("getcwd");
+        err_exit("getcwd()");
     }
 
     chdir("/");
     if (chroot(rootdir) < 0) {
-        err_exit("chroot");
+        err_exit("chroot(%s)", rootdir);
     }
     chdir(cwd);
 
@@ -136,5 +136,5 @@ int main(int argc, char *argv[]) {
 
     setenv("NIX_CONF_DIR", "/nix/etc/nix", 1);
     execvp(argv[2], argv+2);
-    err_exit("execvp");
+    err_exit("execvp(%s)", argv[2]);
 }

@@ -48,7 +48,17 @@ int main(int argc, char *argv[]) {
         usage(argv[0]);
     }
 
-    char template[] = "/tmp/nixXXXXXX";
+    char *tmpdir = getenv("TMPDIR");
+    if (!tmpdir) {
+        tmpdir = "/tmp";
+    }
+
+    char template[PATH_MAX];
+    int needed = snprintf(template, PATH_MAX, "%s/nixXXXXXX", tmpdir);
+    if (needed < 0) {
+        err_exit("TMPDIR too long: '%s'", tmpdir);
+    }
+
     char *rootdir = mkdtemp(template);
     if (!rootdir) {
         err_exit("mkdtemp(%s)", template);

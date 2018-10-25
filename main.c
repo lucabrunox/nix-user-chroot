@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/wait.h>
+#include <sys/syscall.h>
 #include <signal.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -15,6 +16,10 @@
 #include <sys/stat.h>
 
 #define err_exit(format, ...) { fprintf(stderr, format ": %s\n", ##__VA_ARGS__, strerror(errno)); exit(EXIT_FAILURE); }
+
+static int pivot_root(const char *new_root, const char *put_old) {
+   return syscall(SYS_pivot_root,new_root,put_old);
+}
 
 static void usage(char *pname) {
     fprintf(stderr, "Usage: %s <nixpath> <command>\n", pname);
@@ -69,6 +74,11 @@ int main(int argc, char *argv[]) {
         err_exit("realpath(%s)", argv[1]);
     }
 
+    // save cwd to restore it later
+    if (!getcwd(cwd, PATH_MAX)) {
+        err_exit("getcwd()");
+    }
+
     uid_t uid = getuid();
     gid_t gid = getgid();
 
@@ -76,10 +86,30 @@ int main(int argc, char *argv[]) {
         err_exit("unshare()");
     }
 
+    // prepare pivot_root call:
+    // rootdir must be a mount point
+    if (mount(rootdir, rootdir, "none", MS_BIND | MS_REC, NULL) < 0) {
+        err_exit("mount --bind %s %s", rootdir, rootdir);
+    }
+    if (mount(rootdir, rootdir, "none", MS_PRIVATE | MS_REC, NULL) < 0) {
+        err_exit("mount --make-rprivate %s", rootdir);
+    }
+    
+    // create the mount point for the old root
+    snprintf(path_buf, sizeof(path_buf), "%s/oldroot", rootdir);
+    mkdir(path_buf, 0); // the mode is irrelevant
+
+    // pivot_root
+    if (pivot_root(rootdir, path_buf) < 0) {
+        err_exit("pivot_root(%s, %s)", rootdir, path_buf);
+    }
+    chdir("/");
+
     // bind mount all / stuff into rootdir
-    DIR* d = opendir("/");
+    // they are now available under /oldroot
+    DIR* d = opendir("/oldroot");
     if (!d) {
-        err_exit("open /");
+        err_exit("open /oldroot (ie / after pivot_root)");
     }
 
     struct dirent *ent;
@@ -89,7 +119,7 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
-        snprintf(path_buf, sizeof(path_buf), "/%s", ent->d_name);
+        snprintf(path_buf, sizeof(path_buf), "/oldroot/%s", ent->d_name);
 
         struct stat statbuf;
         if (stat(path_buf, &statbuf) < 0) {
@@ -97,7 +127,7 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
-        snprintf(path_buf2, sizeof(path_buf2), "%s/%s", rootdir, ent->d_name);
+        snprintf(path_buf2, sizeof(path_buf2), "/%s", ent->d_name);
 
         if (S_ISDIR(statbuf.st_mode)) {
             mkdir(path_buf2, statbuf.st_mode & ~S_IFMT);
@@ -107,15 +137,20 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    // we don't need the old root now
+    if (umount2("/oldroot", MNT_DETACH) < 0) {
+    	err_exit("umount(/oldroot)");
+    }
+
     struct stat statbuf2;
     if (stat(nixdir, &statbuf2) < 0) {
         err_exit("stat(%s)", nixdir);
     }
 
-    snprintf(path_buf, sizeof(path_buf), "%s/nix", rootdir);
-    mkdir(path_buf, statbuf2.st_mode & ~S_IFMT);
-    if (mount(nixdir, path_buf, "none", MS_BIND | MS_REC, NULL) < 0) {
-        err_exit("mount(%s, %s)", nixdir, path_buf);
+    // create /nix
+    mkdir("/nix", statbuf2.st_mode & ~S_IFMT);
+    if (mount(nixdir, "/nix", "none", MS_BIND | MS_REC, NULL) < 0) {
+        err_exit("mount(%s, /nix", nixdir);
     }
 
     // fixes issue #1 where writing to /proc/self/gid_map fails
@@ -132,18 +167,10 @@ int main(int argc, char *argv[]) {
     snprintf(map_buf, sizeof(map_buf), "%d %d 1", gid, gid);
     update_map(map_buf, "/proc/self/gid_map");
 
-    if (!getcwd(cwd, PATH_MAX)) {
-        err_exit("getcwd()");
-    }
-
-    chdir("/");
-    if (chroot(rootdir) < 0) {
-        err_exit("chroot(%s)", rootdir);
-    }
+    // restore cwd
     chdir(cwd);
 
     // execute the command
-
     setenv("NIX_CONF_DIR", "/nix/etc/nix", 1);
     execvp(argv[2], argv+2);
     err_exit("execvp(%s)", argv[2]);

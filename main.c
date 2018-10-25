@@ -96,7 +96,10 @@ int main(int argc, char *argv[]) {
     }
     
     // create the mount point for the old root
-    snprintf(path_buf, sizeof(path_buf), "%s/oldroot", rootdir);
+    // The old root cannot be unmounted/removed after pivot_root, the only way to
+    // keep / clean is to hide the directory with another mountpoint. Therefore
+    // we pivot the old root to /nix. This is somewhat confusing, though.
+    snprintf(path_buf, sizeof(path_buf), "%s/nix", rootdir);
     mkdir(path_buf, 0); // the mode is irrelevant
 
     // pivot_root
@@ -106,10 +109,10 @@ int main(int argc, char *argv[]) {
     chdir("/");
 
     // bind mount all / stuff into rootdir
-    // they are now available under /oldroot
-    DIR* d = opendir("/oldroot");
+    // they are now available under /nix
+    DIR* d = opendir("/nix");
     if (!d) {
-        err_exit("open /oldroot (ie / after pivot_root)");
+        err_exit("open /");
     }
 
     struct dirent *ent;
@@ -119,7 +122,7 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
-        snprintf(path_buf, sizeof(path_buf), "/oldroot/%s", ent->d_name);
+        snprintf(path_buf, sizeof(path_buf), "/nix/%s", ent->d_name);
 
         struct stat statbuf;
         if (stat(path_buf, &statbuf) < 0) {
@@ -137,18 +140,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // we don't need the old root now
-    if (umount2("/oldroot", MNT_DETACH) < 0) {
-    	err_exit("umount(/oldroot)");
-    }
-
-    struct stat statbuf2;
-    if (stat(nixdir, &statbuf2) < 0) {
-        err_exit("stat(%s)", nixdir);
-    }
-
-    // create /nix
-    mkdir("/nix", statbuf2.st_mode & ~S_IFMT);
+    // mount the store and hide the old root
     if (mount(nixdir, "/nix", "none", MS_BIND | MS_REC, NULL) < 0) {
         err_exit("mount(%s, /nix", nixdir);
     }

@@ -141,8 +141,10 @@ int main(int argc, char *argv[]) {
     }
 
     // mount the store and hide the old root
-    if (mount(nixdir, "/nix", "none", MS_BIND | MS_REC, NULL) < 0) {
-        err_exit("mount(%s, /nix", nixdir);
+    // we fetch nixdir under the old root
+    snprintf(path_buf, sizeof(path_buf), "/nix/%s", nixdir);
+    if (mount(path_buf, "/nix", "none", MS_BIND | MS_REC, NULL) < 0) {
+        err_exit("mount --bind %s /nix", path_buf);
     }
 
     // fixes issue #1 where writing to /proc/self/gid_map fails

@@ -100,7 +100,9 @@ int main(int argc, char *argv[]) {
     // keep / clean is to hide the directory with another mountpoint. Therefore
     // we pivot the old root to /nix. This is somewhat confusing, though.
     snprintf(path_buf, sizeof(path_buf), "%s/nix", rootdir);
-    mkdir(path_buf, 0); // the mode is irrelevant
+    if (mkdir(path_buf, 0) < 0) { // the mode is irrelevant
+        err_exit("mkdir(%s, 0)", path_buf);
+    }
 
     // pivot_root
     if (pivot_root(rootdir, path_buf) < 0) {
@@ -109,10 +111,10 @@ int main(int argc, char *argv[]) {
     chdir("/");
 
     // bind mount all / stuff into rootdir
-    // they are now available under /nix
+    // the orginal content of / now available under /nix
     DIR* d = opendir("/nix");
     if (!d) {
-        err_exit("open /");
+        err_exit("open /nix");
     }
 
     struct dirent *ent;
